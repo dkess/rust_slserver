@@ -74,13 +74,11 @@ pub fn host_coop(send: WSSend, receive: &mut WSReceive, name: String) -> WSGame 
     coop::CoopGame::new(p, words)
 }
 
-/// Sends the name of the game to the host (player #0)
+/// Sends the name of the game to the host
 pub fn send_gamename(gamename: String, game: &Mutex<WSGame>) {
-    let msg = DataFrame::new(true, Opcode::Text, gamename.into_bytes());
-    
     let g = &mut game.lock().unwrap();
     let send = g.players[0].send.as_mut().unwrap();
-    send.send_dataframe(&msg);
+    send_msg(send, gamename);
 }
 
 
@@ -227,7 +225,12 @@ pub fn game_loop(receive: &mut WSReceive, pnum: usize, game: &Mutex<WSGame>) -> 
     Ok(())
 }
 
-pub fn on_disconnect(pnum: usize, game: &Mutex<WSGame>) {
+/// Will be run when a player leaves the game.  This function will set the
+/// player's status to quit, and will inform everyone else that the player has
+/// quit.  Additionally, if this quit triggers an allgiveup, it will modify the
+/// guessed players to reflect this, and send the allgiveup message.  Will
+/// return true if no one is left in the game.
+pub fn on_disconnect(pnum: usize, game: &Mutex<WSGame>) -> bool {
     let mut game = game.lock().unwrap();
     let msg = format!(":quit {}", game.players[pnum].name);
     announce_msg(&mut game, msg, Some(pnum));
@@ -235,10 +238,12 @@ pub fn on_disconnect(pnum: usize, game: &Mutex<WSGame>) {
     match game.player_quit(pnum) {
         Some(coop::QuitResult::AllGiveup) => {
             on_allgiveup(&mut game);
+            false
         },
         Some(coop::QuitResult::AllQuit) => {
             println!("everyone left!");
+            true
         },
-        _ => {}
-    };
+        _ => false
+    }
 }

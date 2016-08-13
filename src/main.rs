@@ -7,18 +7,36 @@ use rand::{Rng, weak_rng};
 use regex::Regex;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, Condvar, RwLock};
 use std::thread;
+use std::time::Duration;
 use websocket::Server;
 use websocket::server::request::RequestUri;
 
 mod clientcoop;
 mod coop;
 
+/// How long we should wait before destroying an empty game
+const GAME_KILL_TIMER_MILLIS: u64 = 86400000;
+
 #[derive(Debug)]
 enum URLAction {
     Host(String),
     Join(String),
+}
+
+struct GameEntry<T> {
+    game: Mutex<T>,
+
+    /// This Condvar gets notified every time someone joins the game.  It
+    /// "saves" the game from being deleted if everyone has left and the
+    /// deletion timer is running.
+    idle_condvar: Condvar,
+
+    /// The number of people connected to this game, including players who have
+    /// not yet chosen their name.  When this drops to zero, the deletion timer
+    /// for this game will begin.
+    connections: Mutex<u8>,
 }
 
 /// Parses an action from a URL.  If this is a coop game, the bool value will
@@ -87,22 +105,26 @@ fn main() {
                 let (send, mut receive) = client.split();
 
                 if is_coop {
-                    let (g, pnum) = match action {
+                    let (game_entry, pnum, gamename) = match action {
                         URLAction::Host(name) => {
                             let game = clientcoop::host_coop(send,
                                                              &mut receive,
                                                              name);
 
-                            let g = Arc::new(Mutex::new(game));
+                            let game_entry = Arc::new(GameEntry {
+                                game: Mutex::new(game),
+                                idle_condvar: Condvar::new(),
+                                connections: Mutex::new(1),
+                            });
 
                             // Keep generating a gamename until we find one 
                             // that hasn't been taken, then place the game into
                             // the dict
                             let mut gamename = generate_gamename();
                             {
-                                let g = g.clone();
+                                let game_entry = game_entry.clone();
                                 let mut coop_games =
-                                    coop_games.write().unwrap();
+                                        coop_games.write().unwrap();
                                 loop {
                                     match coop_games.entry(gamename) {
                                         // if this gamename has already been
@@ -111,33 +133,61 @@ fn main() {
                                             gamename = generate_gamename(),
                                             Entry::Vacant(e) => {
                                                 gamename = e.key().to_owned();
-                                                e.insert(g);
+                                                e.insert(game_entry);
                                                 break;
                                             },
                                     }
                                 }
                             };
 
-                            clientcoop::send_gamename(gamename, &g);
-                            (g, 0)
+                            clientcoop::send_gamename(gamename.clone(), &game_entry.game);
+                            (game_entry, 0, gamename)
                         },
                         URLAction::Join(gamename) => {
-                            let g = {
+                            let game_entry = {
                                 let coop_games = coop_games.read().unwrap();
                                 coop_games.get(&gamename).unwrap().clone()
                             };
 
+                            game_entry.idle_condvar.notify_all();
+                            *game_entry.connections.lock().unwrap() += 1;
+
                             let pnum = clientcoop::join_coop(send,
                                                              &mut receive,
-                                                             &g)
+                                                             &game_entry.game)
                                                             .unwrap();
-                            (g, pnum)
+                            (game_entry, pnum, gamename)
                         }
                     };
 
+                    let mut g = &game_entry.game;
+
                     let err = clientcoop::game_loop(&mut receive, pnum, &g);
+
                     println!("player quit {:?}", err);
-                    clientcoop::on_disconnect(pnum, &g);
+
+                    clientcoop::on_disconnect(pnum, &mut g);
+
+                    let condvar = &game_entry.idle_condvar;
+                    let connections = &game_entry.connections;
+
+                    let mut connections = connections.lock().unwrap();
+                    *connections -= 1;
+
+                    // If there is no one connected, start a timer to destroy
+                    // the game
+                    if *connections == 0 {
+                        let dur = Duration::from_millis(GAME_KILL_TIMER_MILLIS);
+                        let r = condvar.wait_timeout(connections, dur);
+                        let (_, r) = r.unwrap();
+                        if r.timed_out() {
+                            let mut coop_games = coop_games.write().unwrap();
+                            println!("destroying game {}", gamename);
+                            coop_games.remove(&gamename);
+                        } else {
+                            println!("saved {}", gamename);
+                        }
+                    }
                 }
             }
             return;
