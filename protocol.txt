@@ -40,7 +40,7 @@ if it is already in use. If this name is ok, the server will send
 
 	<pname1> <pname2> ...
 
-For each player currently in the game. A player name will have a _ appended if that player has left the game.
+For each player currently in the game. A player name will have a _ appended if that player has left the game. This list will include the player that has just joined.
 
 Then the server will send
 
