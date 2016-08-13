@@ -2,7 +2,7 @@
 
 A client that wishes to start a game should connect to this URL, where <playername> is the name of the client.
 
-	/ws/hostcoop/<playername>
+	/sixletters/ws/hostcoop/<playername>
 
 if the name is invalid, the server will disconnect.
 
@@ -18,7 +18,7 @@ The server will respond with
 
 Client should connect to this URL to join a coop game:
 
-	/ws/join/c<gamename>
+	/sixletters/ws/join/c<gamename>
 
 If that game does not exist, the server will disconnect.  If the lobby does exist, the server will respond with
 

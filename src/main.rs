@@ -43,7 +43,7 @@ struct GameEntry<T> {
 /// be true.
 fn get_urlaction(url: &RequestUri) -> Option<(bool, URLAction)> {
     lazy_static! {
-        static ref RE: Regex = Regex::new(r"(?x)^/ws
+        static ref RE: Regex = Regex::new(r"(?x)^/sixletters/ws
                   # Possibility 1: hosting a game, and supplying
                   # player name
                   /(?:(hostcoop|hostcomp)/([a-zA-Z0-9]{1,10})
@@ -90,7 +90,7 @@ fn generate_gamename() -> String {
 fn main() {
     let coop_games = Arc::new(RwLock::new(HashMap::new()));
 
-    let server = Server::bind("127.0.0.1:8754").unwrap();
+    let server = Server::bind("0.0.0.0:8754").unwrap();
 
     for connection in server {
         let coop_games = coop_games.clone();
