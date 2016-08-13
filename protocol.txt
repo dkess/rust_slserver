@@ -1,0 +1,99 @@
+# Hosting a new coop game
+
+A client that wishes to start a game should connect to this URL, where <playername> is the name of the client.
+
+	/ws/hostcoop/<playername>
+
+if the name is invalid, the server will disconnect.
+
+The client's first message should be a list of space-separated words. Words that have already been guessed should be prefixed with _.  In this example, the words ell, hell, hello, her, hero, heo, hole, holler, lore, ore, roe, role, roll are in the game, and the words hello and roll have already been guessed.  The ordering is not significant:
+
+	ell hell hello_ her roll_ hero hoe hole holler lore ore roe role
+
+The server will respond with
+
+	<gamename>
+
+# Joining a coop game
+
+Client should connect to this URL to join a coop game:
+
+	/ws/join/c<gamename>
+
+If that game does not exist, the server will disconnect.  If the lobby does exist, the server will respond with
+
+	:ok
+
+The client then sends their name
+
+	<name>
+
+The server will respond with
+
+	:badname
+
+if the name is invalid or
+
+	:taken
+
+if it is already in use. If this name is ok, the server will send
+
+	<pname1> <pname2> ...
+
+For each player currently in the game. A player name will have a _ appended if that player has left the game.
+
+Then the server will send
+
+	<word1> <word2> ...
+
+for each word in the game.
+
+the server will then send all of the correct words that have been attempted, using the :attempt format described below.
+
+Then, the server will send all of the players that have voted to give up, using the format described below.
+
+# Coop Gameplay
+
+After attempting any word, the player sends this to the server:
+
+	:attempt <word>
+
+When any user attempts a word and sends it to the server, the following is sent to everyone else in the game, EXCEPT the user who attempted the word. If this word has been given up on, <playername> will be _ (an underscore).
+
+	:attempt <word> <playername>
+
+When a user successfully joins a game (this happens when they get the ":ok" response from the server, the following is sent to everyone else already in the game:
+
+	:join <playername>
+
+When a player quits, the server will send this message:
+
+	:quit <playername>
+
+To vote to give up, the player sends this to the server:
+
+	:giveup
+
+When a player votes to give up, the following is sent to everyone else in the game, EXCEPT the user who placed the vote:
+
+	:giveup <playername>
+
+If all players have given up, the server sends this to all players:
+
+	:allgiveup
+
+If a player removes their vote to give up, the above two messages should be sent, but with :ungiveup instead of :giveup.
+
+If a player quits, their vote to give up should be removed.
+
+To send a chat message, the client sends:
+
+	:chat <msg>
+
+When a chat message is send, the following will be sent to everyone currently in the game, EXCEPT the user who went the message:
+
+	:chat <playername> <msg>
+
+ACCEPTABLE PLAYER NAMES (should be implemented on both server and client side)
+* Names may only be made up of letters and numbers.
+* Names must be between 1 and 10 characters long.

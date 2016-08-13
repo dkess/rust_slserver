@@ -1,0 +1,11 @@
+[package]
+name = "rust_slserver"
+version = "0.1.0"
+authors = ["Daniel Kessler <sinani201@gmail.com>"]
+
+[dependencies]
+itertools = "0.4.17"
+lazy_static = "0.2.1"
+rand = "0.3"
+regex = "0.1"
+websocket = "0.17.1"
